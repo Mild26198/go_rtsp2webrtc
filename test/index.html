@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>RTSPtoWebRTC API Test</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+</head>
+<body>
+    <h1>RTSPtoWebRTC API Test</h1>
+    
+    <div>
+        <h2>1. Test Get Codec Info</h2>
+        <button id="testCodec">Test Codec API</button>
+        <pre id="codecResult"></pre>
+    </div>
+    
+    <div>
+        <h2>2. Test WebRTC Connection</h2>
+        <button id="testWebRTC">Test WebRTC API</button>
+        <video id="videoElem" autoplay muted controls style="width: 640px; height: 360px;"></video>
+        <pre id="webrtcResult"></pre>
+    </div>
+    
+    <div>
+        <h2>3. Test New Stream API</h2>
+        <input type="text" id="rtspUrl" placeholder="RTSP URL" value="rtsp://admin:admin@176.117.205.3:5541/video1" style="width: 400px;">
+        <button id="testNewApi">Test New API</button>
+        <video id="videoElem2" autoplay muted controls style="width: 640px; height: 360px;"></video>
+        <pre id="newApiResult"></pre>
+    </div>
+
+    <script>
+        // สตรีม ID ที่จะทดสอบ
+        const suuid = "H264_AAC";
+        
+        // 1. ทดสอบการดึงข้อมูล codec
+        $('#testCodec').click(function() {
+            $.get(`http://localhost:8083/stream/codec/${suuid}`, function(data) {
+                try {
+                    if (typeof data === 'string') {
+                        data = JSON.parse(data);
+                    }
+                    $('#codecResult').text(JSON.stringify(data, null, 2));
+                } catch (e) {
+                    $('#codecResult').text("Error: " + e + "\nRaw response: " + data);
+                }
+            }).fail(function(err) {
+                $('#codecResult').text("Request failed: " + JSON.stringify(err));
+            });
+        });
+        
+        // 2. ทดสอบการเชื่อมต่อ WebRTC
+        $('#testWebRTC').click(function() {
+            // ตั้งค่า WebRTC
+            let stream = new MediaStream();
+            let config = {
+                iceServers: [{
+                    urls: ["stun:stun.l.google.com:19302"]
+                }]
+            };
+            
+            const pc = new RTCPeerConnection(config);
+            
+            pc.ontrack = function(event) {
+                stream.addTrack(event.track);
+                $('#videoElem')[0].srcObject = stream;
+                $('#webrtcResult').text(`Track received: ${event.track.kind}`);
+            };
+            
+            pc.oniceconnectionstatechange = e => {
+                $('#webrtcResult').append(`\nICE state: ${pc.iceConnectionState}`);
+            };
+            
+            // ขอข้อมูล codec จากเซิร์ฟเวอร์
+            $.get(`http://localhost:8083/stream/codec/${suuid}`, function(data) {
+                try {
+                    if (typeof data === 'string') {
+                        data = JSON.parse(data);
+                    }
+                    
+                    $.each(data, function(index, value) {
+                        pc.addTransceiver(value.Type, {
+                            'direction': 'sendrecv'
+                        });
+                    });
+                    
+                    // สร้าง offer
+                    pc.createOffer().then(offer => {
+                        return pc.setLocalDescription(offer);
+                    }).then(() => {
+                        // ส่ง SDP offer ไปยังเซิร์ฟเวอร์
+                        $.post(`http://localhost:8083/stream/receiver/${suuid}`, {
+                            suuid: suuid,
+                            data: btoa(pc.localDescription.sdp)
+                        }, function(data) {
+                            try {
+                                pc.setRemoteDescription(new RTCSessionDescription({
+                                    type: 'answer',
+                                    sdp: atob(data)
+                                }));
+                                $('#webrtcResult').append("\nConnection established!");
+                            } catch (e) {
+                                $('#webrtcResult').append("\nError setting remote description: " + e);
+                            }
+                        }).fail(function(err) {
+                            $('#webrtcResult').append("\nRequest failed: " + JSON.stringify(err));
+                        });
+                    });
+                } catch (e) {
+                    $('#webrtcResult').text("Error: " + e);
+                }
+            });
+        });
+        
+        // 3. ทดสอบ API ใหม่
+        $('#testNewApi').click(function() {
+            const rtspUrl = $('#rtspUrl').val();
+            let stream = new MediaStream();
+            let config = {
+                iceServers: [{
+                    urls: ["stun:stun.l.google.com:19302"]
+                }]
+            };
+            
+            const pc = new RTCPeerConnection(config);
+            
+            pc.ontrack = function(event) {
+                stream.addTrack(event.track);
+                $('#videoElem2')[0].srcObject = stream;
+                $('#newApiResult').text(`Track received: ${event.track.kind}`);
+            };
+            
+            pc.oniceconnectionstatechange = e => {
+                $('#newApiResult').append(`\nICE state: ${pc.iceConnectionState}`);
+            };
+            
+            // เพิ่ม transceiver สำหรับวิดีโอ
+            pc.addTransceiver('video', {
+                direction: 'sendrecv'
+            });
+            
+            // สร้าง offer
+            pc.createOffer().then(offer => {
+                return pc.setLocalDescription(offer);
+            }).then(() => {
+                // ส่ง URL RTSP และ SDP offer ไปยังเซิร์ฟเวอร์
+                $.post("http://localhost:8083/stream", {
+                    url: rtspUrl,
+                    sdp64: btoa(pc.localDescription.sdp)
+                }, function(data) {
+                    try {
+                        const response = (typeof data === 'string') ? JSON.parse(data) : data;
+                        $('#newApiResult').append("\nResponse: " + JSON.stringify(response, null, 2));
+                        
+                        pc.setRemoteDescription(new RTCSessionDescription({
+                            type: 'answer',
+                            sdp: atob(response.sdp64)
+                        }));
+                        $('#newApiResult').append("\nConnection established!");
+                    } catch (e) {
+                        $('#newApiResult').append("\nError processing response: " + e);
+                    }
+                }).fail(function(err) {
+                    $('#newApiResult').append("\nRequest failed: " + JSON.stringify(err));
+                });
+            });
+        });
+
+        
+    </script>
+</body>
+</html>

@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>RTSPtoWebRTC Multiple Cameras Test</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        .camera-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+        .camera {
+            width: 480px;
+            margin-bottom: 30px;
+            border: 1px solid #ccc;
+            padding: 10px;
+            border-radius: 5px;
+            background-color: #f9f9f9;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        video {
+            width: 100%;
+            background-color: #000;
+            border-radius: 4px;
+        }
+        .controls {
+            margin-top: 10px;
+        }
+        input[type="text"] {
+            width: 100%;
+            padding: 8px;
+            margin-bottom: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .status {
+            font-size: 12px;
+            height: 60px;
+            overflow-y: auto;
+            background-color: #fff;
+            padding: 5px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin-top: 5px;
+        }
+        h1 {
+            color: #333;
+        }
+        .disconnect {
+            background-color: #f44336;
+        }
+        .disconnect:hover {
+            background-color: #d32f2f;
+        }
+    </style>
+</head>
+<body>
+    <h1>RTSPtoWebRTC Multiple Cameras Test</h1>
+    
+    <div class="camera-container" id="cameraContainer">
+        <!-- Camera templates will be added here -->
+    </div>
+
+    <script>
+        // สร้างอาร์เรย์ URLs ของกล้องตัวอย่าง
+        // หมายเหตุ: คุณต้องเปลี่ยนเป็น URLs ของกล้องจริงที่คุณมี
+        const cameraUrls = [
+            "rtsp://admin:admin@192.168.0.101:554/stream1",
+            "rtsp://admin:admin@192.168.0.102:554/stream1",
+            "rtsp://admin:admin@192.168.0.103:554/stream1",
+            "rtsp://admin:admin@192.168.0.104:554/stream1",
+            "rtsp://admin:admin@192.168.0.105:554/stream1",
+            "rtsp://admin:admin@192.168.0.106:554/stream1",
+            "rtsp://admin:admin@192.168.0.107:554/stream1",
+            "rtsp://admin:admin@192.168.0.108:554/stream1",
+            "rtsp://admin:admin@192.168.0.109:554/stream1",
+            "rtsp://admin:admin@192.168.0.110:554/stream1"
+        ];
+
+        // เก็บ WebRTC connections
+        const peerConnections = {};
+
+        // สร้าง UI สำหรับกล้องทั้ง 10 ตัว
+        $(document).ready(function() {
+            // เซิร์ฟเวอร์ RTSPtoWebRTC URL
+            const serverUrl = "http://localhost:8083"; // แก้ไขให้ตรงกับเซิร์ฟเวอร์ของคุณ
+
+            // สร้าง UI สำหรับแต่ละกล้อง
+            cameraUrls.forEach((url, index) => {
+                createCameraElement(index, url);
+            });
+
+            // ฟังก์ชันสร้าง UI สำหรับกล้องแต่ละตัว
+            function createCameraElement(index, url) {
+                const cameraId = `camera${index}`;
+                const cameraElement = `
+                    <div class="camera" id="${cameraId}">
+                        <h3>Camera ${index + 1}</h3>
+                        <video id="video${index}" autoplay muted controls></video>
+                        <div class="controls">
+                            <input type="text" id="url${index}" value="${url}" placeholder="RTSP URL">
+                            <button id="connect${index}" class="connect">Connect</button>
+                            <button id="disconnect${index}" class="disconnect">Disconnect</button>
+                            <div class="status" id="status${index}">Ready to connect.</div>
+                        </div>
+                    </div>
+                `;
+                $('#cameraContainer').append(cameraElement);
+
+                // กำหนด event handlers
+                $(`#connect${index}`).click(function() {
+                    const rtspUrl = $(`#url${index}`).val();
+                    connectCamera(index, rtspUrl);
+                });
+
+                $(`#disconnect${index}`).click(function() {
+                    disconnectCamera(index);
+                });
+            }
+
+            // ฟังก์ชันเชื่อมต่อกล้อง
+            function connectCamera(index, rtspUrl) {
+                const statusElement = $(`#status${index}`);
+                statusElement.text(`Connecting to ${rtspUrl}...`);
+
+                // สร้าง RTCPeerConnection ใหม่
+                const config = {
+                    iceServers: [{
+                        urls: ["stun:stun.l.google.com:19302"]
+                    }]
+                };
+
+                // เคลียร์การเชื่อมต่อเก่าถ้ามี
+                if (peerConnections[index]) {
+                    disconnectCamera(index);
+                }
+
+                // สร้างการเชื่อมต่อใหม่
+                const pc = new RTCPeerConnection(config);
+                peerConnections[index] = pc;
+
+                // สร้าง MediaStream สำหรับวิดีโอ
+                const stream = new MediaStream();
+                $(`#video${index}`)[0].srcObject = stream;
+
+                // เมื่อได้รับ track จากเซิร์ฟเวอร์
+                pc.ontrack = function(event) {
+                    stream.addTrack(event.track);
+                    statusElement.append(`<br>Track received: ${event.track.kind}`);
+                };
+
+                // แสดงสถานะการเชื่อมต่อ ICE
+                pc.oniceconnectionstatechange = function() {
+                    statusElement.append(`<br>ICE state: ${pc.iceConnectionState}`);
+                    
+                    // ถ้าการเชื่อมต่อล้มเหลว
+                    if (pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'closed') {
+                        statusElement.append('<br>Connection failed or closed.');
+                    }
+                };
+
+                // เพิ่ม transceiver สำหรับวิดีโอ
+                pc.addTransceiver('video', {
+                    direction: 'sendrecv'
+                });
+
+                // สร้าง SDP offer
+                pc.createOffer()
+                    .then(offer => {
+                        return pc.setLocalDescription(offer);
+                    })
+                    .then(() => {
+                        // ส่ง URL RTSP และ SDP offer ไปยังเซิร์ฟเวอร์
+                        $.post(`${serverUrl}/stream`, {
+                            url: rtspUrl,
+                            sdp64: btoa(pc.localDescription.sdp)
+                        }, function(data) {
+                            try {
+                                const response = (typeof data === 'string') ? JSON.parse(data) : data;
+                                statusElement.append(`<br>Response received with ${response.tracks.length} tracks.`);
+                                
+                                // ตั้งค่า remote description
+                                pc.setRemoteDescription(new RTCSessionDescription({
+                                    type: 'answer',
+                                    sdp: atob(response.sdp64)
+                                }));
+                                
+                                statusElement.append('<br>Connection established!');
+                            } catch (e) {
+                                statusElement.append(`<br>Error: ${e.message}`);
+                                console.error('Error processing response:', e);
+                            }
+                        }).fail(function(err) {
+                            statusElement.append(`<br>Request failed: ${err.statusText}`);
+                            console.error('Request failed:', err);
+                        });
+                    })
+                    .catch(e => {
+                        statusElement.append(`<br>Error creating offer: ${e.message}`);
+                        console.error('Error creating offer:', e);
+                    });
+            }
+
+            // ฟังก์ชันยกเลิกการเชื่อมต่อกล้อง
+            function disconnectCamera(index) {
+                const statusElement = $(`#status${index}`);
+                
+                if (peerConnections[index]) {
+                    // ปิดการเชื่อมต่อ WebRTC
+                    peerConnections[index].close();
+                    delete peerConnections[index];
+                    
+                    // ลบสตรีมวิดีโอ
+                    $(`#video${index}`)[0].srcObject = null;
+                    
+                    statusElement.text('Disconnected. Ready to connect again.');
+                }
+            }
+        });
+    </script>
+</body>
+</html>

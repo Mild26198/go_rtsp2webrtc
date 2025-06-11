@@ -1,13 +1,13 @@
 {
   "server": {
-    "http_port": ":8083",
+    "http_port": "0.0.0.0:8083",
     "ice_servers": ["stun:stun.l.google.com:19302"]
   },
   "streams": {
     "H264_AAC": {
       "on_demand": false,
       "disable_audio": true,
-      "url": "rtsp://admin:Abc12345@192.168.1.231:554"
+      "url": "rtsp://172.20.0.12:554/profile2/media.smp"
     }
   }
 }

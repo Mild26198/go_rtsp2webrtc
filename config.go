@@ -29,7 +29,7 @@ type ConfigST struct {
 //ServerST struct
 type ServerST struct {
 	HTTPPort      string   `json:"http_port"`
-	ICEServers    []string `json:"ice_servers"`
+	ICEServers    []interface{} `json:"ice_servers"`
 	ICEUsername   string   `json:"ice_username"`
 	ICECredential string   `json:"ice_credential"`
 	WebRTCPortMin uint16   `json:"webrtc_port_min"`
@@ -85,21 +85,64 @@ func (element *ConfigST) HasViewer(uuid string) bool {
 }
 
 func (element *ConfigST) GetICEServers() []string {
-	element.mutex.Lock()
-	defer element.mutex.Unlock()
-	return element.Server.ICEServers
+    element.mutex.Lock()
+    defer element.mutex.Unlock()
+    
+    result := []string{}
+    
+    for _, server := range element.Server.ICEServers {
+        switch v := server.(type) {
+        case string:
+            // กรณีที่เป็น string เช่น "stun:stun.l.google.com:19302"
+            result = append(result, v)
+        case map[string]interface{}:
+            // กรณีที่เป็น object เอาเฉพาะ URL
+            if urls, ok := v["urls"].(string); ok {
+                result = append(result, urls)
+            }
+        }
+    }
+    
+    log.Println("ICE Servers from config:", result)
+    return result
 }
 
 func (element *ConfigST) GetICEUsername() string {
-	element.mutex.Lock()
-	defer element.mutex.Unlock()
-	return element.Server.ICEUsername
+    element.mutex.Lock()
+    defer element.mutex.Unlock()
+    
+    // ตรวจสอบใน ice_servers
+    for _, server := range element.Server.ICEServers {
+        switch v := server.(type) {
+        case map[string]interface{}:
+            if username, ok := v["username"]; ok {
+                if strUsername, ok := username.(string); ok {
+                    return strUsername
+                }
+            }
+        }
+    }
+    
+    return element.Server.ICEUsername
 }
 
 func (element *ConfigST) GetICECredential() string {
-	element.mutex.Lock()
-	defer element.mutex.Unlock()
-	return element.Server.ICECredential
+    element.mutex.Lock()
+    defer element.mutex.Unlock()
+    
+    // ตรวจสอบใน ice_servers
+    for _, server := range element.Server.ICEServers {
+        switch v := server.(type) {
+        case map[string]interface{}:
+            if credential, ok := v["credential"]; ok {
+                if strCredential, ok := credential.(string); ok {
+                    return strCredential
+                }
+            }
+        }
+    }
+    
+    return element.Server.ICECredential
 }
 
 func (element *ConfigST) GetWebRTCPortMin() uint16 {
@@ -137,7 +180,13 @@ func loadConfig() *ConfigST {
 		tmp.Server.WebRTCPortMin = uint16(*udpMin)
 		tmp.Server.WebRTCPortMax = uint16(*udpMax)
 		if len(*iceServer) > 0 {
-			tmp.Server.ICEServers = []string{*iceServer}
+			tmp.Server.ICEServers = []interface{}{
+				map[string]interface{}{
+					"urls":       "turn:turn.prmconnext.com:3478",
+					"username":   "piramid",
+					"credential": "P@ssw0rd",
+				},
+			}
 		}
 
 		tmp.Streams = make(map[string]StreamST)

@@ -114,7 +114,16 @@ func HTTPAPIServerStreamWebRTC(c *gin.Context) {
 	if len(codecs) == 1 && codecs[0].Type().IsAudio() {
 		AudioOnly = true
 	}
-	muxerWebRTC := webrtc.NewMuxer(webrtc.Options{ICEServers: Config.GetICEServers(), ICEUsername: Config.GetICEUsername(), ICECredential: Config.GetICECredential(), PortMin: Config.GetWebRTCPortMin(), PortMax: Config.GetWebRTCPortMax()})
+
+	// สร้าง muxer โดยกำหนดค่า TURN Server โดยตรง
+	muxerWebRTC := webrtc.NewMuxer(webrtc.Options{
+		ICEServers:    []string{"turn:turn.prmconnext.com:3478"},
+		ICEUsername:   "piramid",
+		ICECredential: "P@ssw0rd",
+		PortMin:       Config.GetWebRTCPortMin(),
+		PortMax:       Config.GetWebRTCPortMax(),
+	})
+
 	answer, err := muxerWebRTC.WriteHeader(codecs, c.PostForm("data"))
 	if err != nil {
 		log.Println("WriteHeader", err)
@@ -199,13 +208,14 @@ func HTTPAPIServerStreamWebRTC2(c *gin.Context) {
 		return
 	}
 
-	muxerWebRTC := webrtc.NewMuxer(
-		webrtc.Options{
-			ICEServers: Config.GetICEServers(),
-			PortMin:    Config.GetWebRTCPortMin(),
-			PortMax:    Config.GetWebRTCPortMax(),
-		},
-	)
+	// สร้าง muxer โดยกำหนดค่า TURN Server โดยตรง
+	muxerWebRTC := webrtc.NewMuxer(webrtc.Options{
+		ICEServers:    []string{"turn:turn.prmconnext.com:3478"},
+		ICEUsername:   "piramid",
+		ICECredential: "P@ssw0rd",
+		PortMin:       Config.GetWebRTCPortMin(),
+		PortMax:       Config.GetWebRTCPortMax(),
+	})
 
 	sdp64 := c.PostForm("sdp64")
 	answer, err := muxerWebRTC.WriteHeader(codecs, sdp64)

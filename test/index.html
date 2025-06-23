@@ -34,7 +34,7 @@
         
         // 1. ทดสอบการดึงข้อมูล codec
         $('#testCodec').click(function() {
-            $.get(`http://localhost:8083/stream/codec/${suuid}`, function(data) {
+            $.get(`https://dev.prmconnext.com:28082/stream/codec/${suuid}`, function(data) {
                 try {
                     if (typeof data === 'string') {
                         data = JSON.parse(data);

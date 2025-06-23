@@ -98,7 +98,7 @@
         // สร้าง UI สำหรับกล้องทั้ง 10 ตัว
         $(document).ready(function() {
             // เซิร์ฟเวอร์ RTSPtoWebRTC URL
-            const serverUrl = "http://localhost:8083"; // แก้ไขให้ตรงกับเซิร์ฟเวอร์ของคุณ
+            const serverUrl = "https://dev.prmconnext.com:28082"; // แก้ไขให้ตรงกับเซิร์ฟเวอร์ของคุณ
 
             // สร้าง UI สำหรับแต่ละกล้อง
             cameraUrls.forEach((url, index) => {
@@ -140,10 +140,24 @@
 
                 // สร้าง RTCPeerConnection ใหม่
                 const config = {
-                    iceServers: [{
-                        urls: ["stun:stun.l.google.com:19302"]
-                    }]
+                    iceServers: [
+                        // ลบ STUN Server ออก
+                        // {
+                        //     urls: ["stun:stun.l.google.com:19302"]
+                        // },
+                        // ใช้เฉพาะ TURN Server
+                        {
+                            urls: "turn:turn.prmconnext.com:3478",
+                            username: "piramid",
+                            credential: "P@ssw0rd"
+                        }
+                    ],
+                    // เพิ่มการตั้งค่า ICE Transport Policy เป็น relay เพื่อบังคับให้ใช้ TURN เท่านั้น
+                    iceTransportPolicy: "relay"
                 };
+
+                // เพิ่ม log เพื่อตรวจสอบว่ากำลังใช้ TURN Server
+                console.log("Creating RTCPeerConnection with config:", config);
 
                 // เคลียร์การเชื่อมต่อเก่าถ้ามี
                 if (peerConnections[index]) {
@@ -177,6 +191,33 @@
                 // เพิ่ม transceiver สำหรับวิดีโอ
                 pc.addTransceiver('video', {
                     direction: 'sendrecv'
+                });
+
+                // เพิ่มเข้าไปในฟังก์ชัน connectCamera หลังจากสร้าง pc
+                pc.onicecandidate = function(event) {
+                    if (event.candidate) {
+                        console.log("ICE candidate:", event.candidate);
+                        statusElement.append(`<br>ICE candidate: ${event.candidate.type}`);
+                        
+                        // สำหรับ TURN server จะมี type เป็น 'relay'
+                        if (event.candidate.type === 'relay') {
+                            statusElement.append('<br><strong>Using TURN relay</strong>');
+                        }
+                    }
+                };
+
+                // เพิ่ม event handler สำหรับตรวจสอบการเลือก ICE candidate
+                pc.addEventListener("icecandidatepairchanged", (event) => {
+                    if (event.pair && event.pair.selected) {
+                        statusElement.append(`<br>Selected ICE: ${event.pair.local.type} -> ${event.pair.remote.type}`);
+                        
+                        // ตรวจสอบว่ากำลังใช้ TURN หรือไม่
+                        if (event.pair.local.type === "relay" || event.pair.remote.type === "relay") {
+                            statusElement.append("<br>Using TURN server (relay)");
+                        } else {
+                            statusElement.append("<br>Direct connection or STUN");
+                        }
+                    }
                 });
 
                 // สร้าง SDP offer

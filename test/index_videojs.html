@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>RTSPtoWebRTC Multiple Cameras with Video.js</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    
+    <!-- Video.js CSS -->
+    <link href="https://vjs.zencdn.net/8.5.2/video-js.css" rel="stylesheet">
+    
+    <!-- Video.js JavaScript -->
+    <script src="https://vjs.zencdn.net/8.5.2/video.min.js"></script>
+    
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .camera-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+        .camera {
+            background-color: white;
+            border: 1px solid #ddd;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            transition: transform 0.2s;
+        }
+        .camera:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        .camera h3 {
+            margin: 0 0 15px 0;
+            color: #333;
+            font-size: 18px;
+            border-bottom: 2px solid #4CAF50;
+            padding-bottom: 5px;
+        }
+        .video-js {
+            width: 100%;
+            height: 240px;
+            border-radius: 6px;
+        }
+        .controls {
+            margin-top: 15px;
+        }
+        input[type="text"] {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 10px;
+            font-size: 14px;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .disconnect {
+            background-color: #f44336;
+        }
+        .disconnect:hover {
+            background-color: #d32f2f;
+        }
+        .status {
+            font-size: 12px;
+            height: 80px;
+            overflow-y: auto;
+            background-color: #f9f9f9;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin-top: 10px;
+            font-family: monospace;
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .header-info {
+            text-align: center;
+            margin-bottom: 20px;
+            color: #666;
+        }
+        .connected {
+            border-left: 4px solid #4CAF50;
+        }
+        .connecting {
+            border-left: 4px solid #ff9800;
+        }
+        .disconnected {
+            border-left: 4px solid #f44336;
+        }
+    </style>
+</head>
+<body>
+    <h1>RTSPtoWebRTC Multiple Cameras with Video.js</h1>
+    <div class="header-info">
+        <p>Enhanced RTSP streaming with Video.js player controls</p>
+    </div>
+    
+    <div class="camera-container" id="cameraContainer">
+        <!-- Camera templates will be added here -->
+    </div>
+
+    <script>
+        // สร้างอาร์เรย์ URLs ของกล้องตัวอย่าง
+        const cameraUrls = [
+            "rtsp://172.20.0.12:554/profile2/media.smp",
+            "rtsp://172.20.0.13:554/profile2/media.smp",
+            "rtsp://172.20.0.14:554/profile2/media.smp",
+            "rtsp://172.20.0.16:554/profile2/media.smp",
+            "rtsp://172.20.0.44:554/profile2/media.smp",
+            "rtsp://172.20.0.31:554/profile2/media.smp",
+            "rtsp://172.20.0.32:554/profile2/media.smp",
+            "rtsp://172.20.0.33:554/profile2/media.smp",
+            "rtsp://172.20.0.34:554/profile2/media.smp",
+            "rtsp://172.20.0.51:554/profile2/media.smp"
+        ];
+
+        // เก็บ WebRTC connections และ Video.js players
+        const peerConnections = {};
+        const videoPlayers = {};
+
+        // สร้าง UI สำหรับกล้องทั้ง 10 ตัว
+        $(document).ready(function() {
+            // เซิร์ฟเวอร์ RTSPtoWebRTC URL
+            const serverUrl = "https://dev.prmconnext.com:28082";
+
+            // สร้าง UI สำหรับแต่ละกล้อง
+            cameraUrls.forEach((url, index) => {
+                createCameraElement(index, url);
+            });
+
+            // ฟังก์ชันสร้าง UI สำหรับกล้องแต่ละตัว
+            function createCameraElement(index, url) {
+                const cameraId = `camera${index}`;
+                const videoId = `video${index}`;
+                const cameraElement = `
+                    <div class="camera disconnected" id="${cameraId}">
+                        <h3>Camera ${index + 1}</h3>
+                        <video-js 
+                            id="${videoId}" 
+                            class="video-js vjs-default-skin" 
+                            controls 
+                            preload="auto" 
+                            data-setup='{"fluid": true, "responsive": true}'>
+                            <p class="vjs-no-js">
+                                To view this video please enable JavaScript, and consider upgrading to a web browser that
+                                <a href="https://videojs.com/html5-video-support/" target="_blank">supports HTML5 video</a>.
+                            </p>
+                        </video-js>
+                        <div class="controls">
+                            <input type="text" id="url${index}" value="${url}" placeholder="RTSP URL">
+                            <button id="connect${index}" class="connect">Connect</button>
+                            <button id="disconnect${index}" class="disconnect">Disconnect</button>
+                            <div class="status" id="status${index}">Ready to connect.</div>
+                        </div>
+                    </div>
+                `;
+                $('#cameraContainer').append(cameraElement);
+
+                // สร้าง Video.js player
+                const player = videojs(videoId, {
+                    controls: true,
+                    fluid: true,
+                    responsive: true,
+                    playsinline: true,
+                    muted: true,
+                    autoplay: 'muted',
+                    preload: 'auto',
+                    techOrder: ['html5'],
+                    html5: {
+                        nativeVideoTracks: false,
+                        nativeAudioTracks: false,
+                        nativeTextTracks: false
+                    }
+                });
+
+                // รอให้ player พร้อมแล้วค่อยตั้งค่า
+                player.ready(() => {
+                    console.log(`Player ${index} is ready`);
+                });
+
+                // เก็บ player reference
+                videoPlayers[index] = player;
+
+                // Player events
+                player.on('loadstart', function() {
+                    updateStatus(index, 'Loading stream...');
+                });
+
+                player.on('canplay', function() {
+                    updateStatus(index, 'Stream ready to play');
+                });
+
+                player.on('playing', function() {
+                    updateStatus(index, 'Playing');
+                    updateCameraStatus(index, 'connected');
+                });
+
+                player.on('error', function(e) {
+                    updateStatus(index, `Player error: ${e.message || 'Unknown error'}`);
+                    updateCameraStatus(index, 'disconnected');
+                });
+
+                player.on('waiting', function() {
+                    updateStatus(index, 'Buffering...');
+                });
+
+                // กำหนด event handlers
+                $(`#connect${index}`).click(function() {
+                    const rtspUrl = $(`#url${index}`).val();
+                    connectCamera(index, rtspUrl);
+                });
+
+                $(`#disconnect${index}`).click(function() {
+                    disconnectCamera(index);
+                });
+            }
+
+            // ฟังก์ชันอัปเดตสถานะ
+            function updateStatus(index, message) {
+                const statusElement = $(`#status${index}`);
+                const timestamp = new Date().toLocaleTimeString();
+                statusElement.append(`<br>[${timestamp}] ${message}`);
+                statusElement.scrollTop(statusElement[0].scrollHeight);
+            }
+
+            // ฟังก์ชันอัปเดตสถานะกล้อง
+            function updateCameraStatus(index, status) {
+                const cameraElement = $(`#camera${index}`);
+                cameraElement.removeClass('connected connecting disconnected');
+                cameraElement.addClass(status);
+            }
+
+            // ฟังก์ชันเชื่อมต่อกล้อง
+            function connectCamera(index, rtspUrl) {
+                updateStatus(index, `Connecting to ${rtspUrl}...`);
+                updateCameraStatus(index, 'connecting');
+
+                // สร้าง RTCPeerConnection ใหม่
+                const config = {
+                    iceServers: [
+                        {
+                            urls: "turn:turn.prmconnext.com:3478",
+                            username: "piramid",
+                            credential: "P@ssw0rd"
+                        }
+                    ],
+                    iceTransportPolicy: "relay"
+                };
+
+                console.log("Creating RTCPeerConnection with config:", config);
+
+                // เคลียร์การเชื่อมต่อเก่าถ้ามี
+                if (peerConnections[index]) {
+                    disconnectCamera(index);
+                }
+
+                // สร้างการเชื่อมต่อใหม่
+                const pc = new RTCPeerConnection(config);
+                peerConnections[index] = pc;
+
+                // สร้าง MediaStream สำหรับวิดีโอ
+                const stream = new MediaStream();
+                
+                // ตั้งค่า stream ให้กับ Video.js player
+                const player = videoPlayers[index];
+                
+                // เมื่อได้รับ track จากเซิร์ฟเวอร์
+                pc.ontrack = function(event) {
+                    stream.addTrack(event.track);
+                    updateStatus(index, `Track received: ${event.track.kind}`);
+                    
+                    // ตั้งค่า srcObject โดยตรงให้กับ video element
+                    const videoElement = player.el().querySelector('video');
+                    if (videoElement) {
+                        videoElement.srcObject = stream;
+                        videoElement.play().catch(e => {
+                            console.log('Auto-play prevented:', e);
+                        });
+                    }
+                };
+
+                // แสดงสถานะการเชื่อมต่อ ICE
+                pc.oniceconnectionstatechange = function() {
+                    updateStatus(index, `ICE state: ${pc.iceConnectionState}`);
+                    
+                    if (pc.iceConnectionState === 'connected') {
+                        updateCameraStatus(index, 'connected');
+                    } else if (pc.iceConnectionState === 'failed' || 
+                               pc.iceConnectionState === 'disconnected' || 
+                               pc.iceConnectionState === 'closed') {
+                        updateStatus(index, 'Connection failed or closed.');
+                        updateCameraStatus(index, 'disconnected');
+                    }
+                };
+
+                // เพิ่ม transceiver สำหรับวิดีโอ
+                pc.addTransceiver('video', {
+                    direction: 'sendrecv'
+                });
+
+                pc.onicecandidate = function(event) {
+                    if (event.candidate) {
+                        console.log("ICE candidate:", event.candidate);
+                        updateStatus(index, `ICE candidate: ${event.candidate.type}`);
+                        
+                        if (event.candidate.type === 'relay') {
+                            updateStatus(index, 'Using TURN relay');
+                        }
+                    }
+                };
+
+                // สร้าง SDP offer
+                pc.createOffer()
+                    .then(offer => {
+                        return pc.setLocalDescription(offer);
+                    })
+                    .then(() => {
+                        // ส่ง URL RTSP และ SDP offer ไปยังเซิร์ฟเวอร์
+                        $.post(`${serverUrl}/stream`, {
+                            url: rtspUrl,
+                            sdp64: btoa(pc.localDescription.sdp)
+                        }, function(data) {
+                            try {
+                                const response = (typeof data === 'string') ? JSON.parse(data) : data;
+                                updateStatus(index, `Response received with ${response.tracks.length} tracks.`);
+                                
+                                // ตั้งค่า remote description
+                                pc.setRemoteDescription(new RTCSessionDescription({
+                                    type: 'answer',
+                                    sdp: atob(response.sdp64)
+                                }));
+                                
+                                updateStatus(index, 'Connection established!');
+                            } catch (e) {
+                                updateStatus(index, `Error: ${e.message}`);
+                                updateCameraStatus(index, 'disconnected');
+                                console.error('Error processing response:', e);
+                            }
+                        }).fail(function(err) {
+                            updateStatus(index, `Request failed: ${err.statusText}`);
+                            updateCameraStatus(index, 'disconnected');
+                            console.error('Request failed:', err);
+                        });
+                    })
+                    .catch(e => {
+                        updateStatus(index, `Error creating offer: ${e.message}`);
+                        updateCameraStatus(index, 'disconnected');
+                        console.error('Error creating offer:', e);
+                    });
+            }
+
+            // ฟังก์ชันยกเลิกการเชื่อมต่อกล้อง
+            function disconnectCamera(index) {
+                updateStatus(index, 'Disconnecting...');
+                
+                if (peerConnections[index]) {
+                    // ปิดการเชื่อมต่อ WebRTC
+                    peerConnections[index].close();
+                    delete peerConnections[index];
+                }
+                
+                // รีเซ็ต Video.js player
+                if (videoPlayers[index]) {
+                    const player = videoPlayers[index];
+                    player.pause();
+                    
+                    // ล้าง srcObject ของ video element
+                    const videoElement = player.el().querySelector('video');
+                    if (videoElement) {
+                        videoElement.srcObject = null;
+                    }
+                    
+                    // รีเซ็ต player source
+                    player.src('');
+                }
+                
+                updateStatus(index, 'Disconnected. Ready to connect again.');
+                updateCameraStatus(index, 'disconnected');
+            }
+
+            // เพิ่มฟังก์ชันทำความสะอาดเมื่อปิดหน้าเว็บ
+            $(window).on('beforeunload', function() {
+                Object.keys(peerConnections).forEach(index => {
+                    disconnectCamera(index);
+                });
+                
+                Object.keys(videoPlayers).forEach(index => {
+                    if (videoPlayers[index]) {
+                        videoPlayers[index].dispose();
+                    }
+                });
+            });
+        });
+    </script>
+</body>
+</html>

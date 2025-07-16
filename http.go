@@ -41,18 +41,24 @@ func serveHTTP() {
 }
 
 //HTTPAPIServerIndex  index
+// func HTTPAPIServerIndex(c *gin.Context) {
+// 	_, all := Config.list()
+// 	if len(all) > 0 {
+// 		c.Header("Cache-Control", "no-cache, max-age=0, must-revalidate, no-store")
+// 		c.Header("Access-Control-Allow-Origin", "*")
+// 		c.Redirect(http.StatusMovedPermanently, "stream/player/"+all[0])
+// 	} else {
+// 		c.HTML(http.StatusOK, "index.tmpl", gin.H{
+// 			"port":    Config.Server.HTTPPort,
+// 			"version": time.Now().String(),
+// 		})
+// 	}
+// }
+
+//HTTPAPIServerIndex  index
 func HTTPAPIServerIndex(c *gin.Context) {
-	_, all := Config.list()
-	if len(all) > 0 {
-		c.Header("Cache-Control", "no-cache, max-age=0, must-revalidate, no-store")
-		c.Header("Access-Control-Allow-Origin", "*")
-		c.Redirect(http.StatusMovedPermanently, "stream/player/"+all[0])
-	} else {
-		c.HTML(http.StatusOK, "index.tmpl", gin.H{
-			"port":    Config.Server.HTTPPort,
-			"version": time.Now().String(),
-		})
-	}
+    // แทนที่โค้ดเดิมด้วยการส่งไฟล์ HTML โดยตรง
+    c.File("./test/index.html")
 }
 
 //HTTPAPIServerStreamPlayer stream player

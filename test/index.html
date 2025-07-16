@@ -1,171 +1,278 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>RTSPtoWebRTC API Test</title>
+    <title>RTSPtoWebRTC Multiple Cameras Test</title>
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        .camera-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+        .camera {
+            width: 480px;
+            margin-bottom: 30px;
+            border: 1px solid #ccc;
+            padding: 10px;
+            border-radius: 5px;
+            background-color: #f9f9f9;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        video {
+            width: 100%;
+            background-color: #000;
+            border-radius: 4px;
+        }
+        .controls {
+            margin-top: 10px;
+        }
+        input[type="text"] {
+            width: 100%;
+            padding: 8px;
+            margin-bottom: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .status {
+            font-size: 12px;
+            height: 60px;
+            overflow-y: auto;
+            background-color: #fff;
+            padding: 5px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin-top: 5px;
+        }
+        h1 {
+            color: #333;
+        }
+        .disconnect {
+            background-color: #f44336;
+        }
+        .disconnect:hover {
+            background-color: #d32f2f;
+        }
+    </style>
 </head>
 <body>
-    <h1>RTSPtoWebRTC API Test</h1>
+    <h1>RTSPtoWebRTC Multiple Cameras Test</h1>
     
-    <div>
-        <h2>1. Test Get Codec Info</h2>
-        <button id="testCodec">Test Codec API</button>
-        <pre id="codecResult"></pre>
-    </div>
-    
-    <div>
-        <h2>2. Test WebRTC Connection</h2>
-        <button id="testWebRTC">Test WebRTC API</button>
-        <video id="videoElem" autoplay muted controls style="width: 640px; height: 360px;"></video>
-        <pre id="webrtcResult"></pre>
-    </div>
-    
-    <div>
-        <h2>3. Test New Stream API</h2>
-        <input type="text" id="rtspUrl" placeholder="RTSP URL" value="rtsp://admin:admin@176.117.205.3:5541/video1" style="width: 400px;">
-        <button id="testNewApi">Test New API</button>
-        <video id="videoElem2" autoplay muted controls style="width: 640px; height: 360px;"></video>
-        <pre id="newApiResult"></pre>
+    <div class="camera-container" id="cameraContainer">
+        <!-- Camera templates will be added here -->
     </div>
 
     <script>
-        // สตรีม ID ที่จะทดสอบ
-        const suuid = "H264_AAC";
-        
-        // 1. ทดสอบการดึงข้อมูล codec
-        $('#testCodec').click(function() {
-            $.get(`https://dev.prmconnext.com:28082/stream/codec/${suuid}`, function(data) {
-                try {
-                    if (typeof data === 'string') {
-                        data = JSON.parse(data);
-                    }
-                    $('#codecResult').text(JSON.stringify(data, null, 2));
-                } catch (e) {
-                    $('#codecResult').text("Error: " + e + "\nRaw response: " + data);
-                }
-            }).fail(function(err) {
-                $('#codecResult').text("Request failed: " + JSON.stringify(err));
+        // สร้างอาร์เรย์ URLs ของกล้องตัวอย่าง
+        // หมายเหตุ: คุณต้องเปลี่ยนเป็น URLs ของกล้องจริงที่คุณมี
+        const cameraUrls = [
+            "rtsp://172.20.0.12:554/profile2/media.smp",
+            "rtsp://172.20.0.13:554/profile2/media.smp",
+            "rtsp://172.20.0.14:554/profile2/media.smp",
+            "rtsp://172.20.0.16:554/profile2/media.smp",
+            "rtsp://172.20.0.44:554/profile2/media.smp",
+            "rtsp://172.20.0.31:554/profile2/media.smp",
+            "rtsp://172.20.0.32:554/profile2/media.smp",
+            "rtsp://172.20.0.33:554/profile2/media.smp",
+            "rtsp://172.20.0.34:554/profile2/media.smp",
+            "rtsp://172.20.0.51:554/profile2/media.smp"
+        ];
+
+        // เก็บ WebRTC connections
+        const peerConnections = {};
+
+        // สร้าง UI สำหรับกล้องทั้ง 10 ตัว
+        $(document).ready(function() {
+            // เซิร์ฟเวอร์ RTSPtoWebRTC URL
+            const serverUrl = "https://dev.prmconnext.com:28082"; // แก้ไขให้ตรงกับเซิร์ฟเวอร์ของคุณ
+
+            // สร้าง UI สำหรับแต่ละกล้อง
+            cameraUrls.forEach((url, index) => {
+                createCameraElement(index, url);
             });
-        });
-        
-        // 2. ทดสอบการเชื่อมต่อ WebRTC
-        $('#testWebRTC').click(function() {
-            // ตั้งค่า WebRTC
-            let stream = new MediaStream();
-            let config = {
-                iceServers: [{
-                    urls: ["stun:stun.l.google.com:19302"]
-                }]
-            };
-            
-            const pc = new RTCPeerConnection(config);
-            
-            pc.ontrack = function(event) {
-                stream.addTrack(event.track);
-                $('#videoElem')[0].srcObject = stream;
-                $('#webrtcResult').text(`Track received: ${event.track.kind}`);
-            };
-            
-            pc.oniceconnectionstatechange = e => {
-                $('#webrtcResult').append(`\nICE state: ${pc.iceConnectionState}`);
-            };
-            
-            // ขอข้อมูล codec จากเซิร์ฟเวอร์
-            $.get(`http://localhost:8083/stream/codec/${suuid}`, function(data) {
-                try {
-                    if (typeof data === 'string') {
-                        data = JSON.parse(data);
+
+            // ฟังก์ชันสร้าง UI สำหรับกล้องแต่ละตัว
+            function createCameraElement(index, url) {
+                const cameraId = `camera${index}`;
+                const cameraElement = `
+                    <div class="camera" id="${cameraId}">
+                        <h3>Camera ${index + 1}</h3>
+                        <video id="video${index}" autoplay muted controls></video>
+                        <div class="controls">
+                            <input type="text" id="url${index}" value="${url}" placeholder="RTSP URL">
+                            <button id="connect${index}" class="connect">Connect</button>
+                            <button id="disconnect${index}" class="disconnect">Disconnect</button>
+                            <div class="status" id="status${index}">Ready to connect.</div>
+                        </div>
+                    </div>
+                `;
+                $('#cameraContainer').append(cameraElement);
+
+                // กำหนด event handlers
+                $(`#connect${index}`).click(function() {
+                    const rtspUrl = $(`#url${index}`).val();
+                    connectCamera(index, rtspUrl);
+                });
+
+                $(`#disconnect${index}`).click(function() {
+                    disconnectCamera(index);
+                });
+            }
+
+            // ฟังก์ชันเชื่อมต่อกล้อง
+            function connectCamera(index, rtspUrl) {
+                const statusElement = $(`#status${index}`);
+                statusElement.text(`Connecting to ${rtspUrl}...`);
+
+                // สร้าง RTCPeerConnection ใหม่
+                const config = {
+                    iceServers: [
+                        // ลบ STUN Server ออก
+                        // {
+                        //     urls: ["stun:stun.l.google.com:19302"]
+                        // },
+                        // ใช้เฉพาะ TURN Server
+                        {
+                            urls: "turn:turn.prmconnext.com:3478",
+                            username: "piramid",
+                            credential: "P@ssw0rd"
+                        }
+                    ],
+                    // เพิ่มการตั้งค่า ICE Transport Policy เป็น relay เพื่อบังคับให้ใช้ TURN เท่านั้น
+                    iceTransportPolicy: "relay"
+                };
+
+                // เพิ่ม log เพื่อตรวจสอบว่ากำลังใช้ TURN Server
+                console.log("Creating RTCPeerConnection with config:", config);
+
+                // เคลียร์การเชื่อมต่อเก่าถ้ามี
+                if (peerConnections[index]) {
+                    disconnectCamera(index);
+                }
+
+                // สร้างการเชื่อมต่อใหม่
+                const pc = new RTCPeerConnection(config);
+                peerConnections[index] = pc;
+
+                // สร้าง MediaStream สำหรับวิดีโอ
+                const stream = new MediaStream();
+                $(`#video${index}`)[0].srcObject = stream;
+
+                // เมื่อได้รับ track จากเซิร์ฟเวอร์
+                pc.ontrack = function(event) {
+                    stream.addTrack(event.track);
+                    statusElement.append(`<br>Track received: ${event.track.kind}`);
+                };
+
+                // แสดงสถานะการเชื่อมต่อ ICE
+                pc.oniceconnectionstatechange = function() {
+                    statusElement.append(`<br>ICE state: ${pc.iceConnectionState}`);
+                    
+                    // ถ้าการเชื่อมต่อล้มเหลว
+                    if (pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'closed') {
+                        statusElement.append('<br>Connection failed or closed.');
                     }
-                    
-                    $.each(data, function(index, value) {
-                        pc.addTransceiver(value.Type, {
-                            'direction': 'sendrecv'
-                        });
-                    });
-                    
-                    // สร้าง offer
-                    pc.createOffer().then(offer => {
+                };
+
+                // เพิ่ม transceiver สำหรับวิดีโอ
+                pc.addTransceiver('video', {
+                    direction: 'sendrecv'
+                });
+
+                // เพิ่มเข้าไปในฟังก์ชัน connectCamera หลังจากสร้าง pc
+                pc.onicecandidate = function(event) {
+                    if (event.candidate) {
+                        console.log("ICE candidate:", event.candidate);
+                        statusElement.append(`<br>ICE candidate: ${event.candidate.type}`);
+                        
+                        // สำหรับ TURN server จะมี type เป็น 'relay'
+                        if (event.candidate.type === 'relay') {
+                            statusElement.append('<br><strong>Using TURN relay</strong>');
+                        }
+                    }
+                };
+
+                // เพิ่ม event handler สำหรับตรวจสอบการเลือก ICE candidate
+                pc.addEventListener("icecandidatepairchanged", (event) => {
+                    if (event.pair && event.pair.selected) {
+                        statusElement.append(`<br>Selected ICE: ${event.pair.local.type} -> ${event.pair.remote.type}`);
+                        
+                        // ตรวจสอบว่ากำลังใช้ TURN หรือไม่
+                        if (event.pair.local.type === "relay" || event.pair.remote.type === "relay") {
+                            statusElement.append("<br>Using TURN server (relay)");
+                        } else {
+                            statusElement.append("<br>Direct connection or STUN");
+                        }
+                    }
+                });
+
+                // สร้าง SDP offer
+                pc.createOffer()
+                    .then(offer => {
                         return pc.setLocalDescription(offer);
-                    }).then(() => {
-                        // ส่ง SDP offer ไปยังเซิร์ฟเวอร์
-                        $.post(`http://localhost:8083/stream/receiver/${suuid}`, {
-                            suuid: suuid,
-                            data: btoa(pc.localDescription.sdp)
+                    })
+                    .then(() => {
+                        // ส่ง URL RTSP และ SDP offer ไปยังเซิร์ฟเวอร์
+                        $.post(`${serverUrl}/stream`, {
+                            url: rtspUrl,
+                            sdp64: btoa(pc.localDescription.sdp)
                         }, function(data) {
                             try {
+                                const response = (typeof data === 'string') ? JSON.parse(data) : data;
+                                statusElement.append(`<br>Response received with ${response.tracks.length} tracks.`);
+                                
+                                // ตั้งค่า remote description
                                 pc.setRemoteDescription(new RTCSessionDescription({
                                     type: 'answer',
-                                    sdp: atob(data)
+                                    sdp: atob(response.sdp64)
                                 }));
-                                $('#webrtcResult').append("\nConnection established!");
+                                
+                                statusElement.append('<br>Connection established!');
                             } catch (e) {
-                                $('#webrtcResult').append("\nError setting remote description: " + e);
+                                statusElement.append(`<br>Error: ${e.message}`);
+                                console.error('Error processing response:', e);
                             }
                         }).fail(function(err) {
-                            $('#webrtcResult').append("\nRequest failed: " + JSON.stringify(err));
+                            statusElement.append(`<br>Request failed: ${err.statusText}`);
+                            console.error('Request failed:', err);
                         });
+                    })
+                    .catch(e => {
+                        statusElement.append(`<br>Error creating offer: ${e.message}`);
+                        console.error('Error creating offer:', e);
                     });
-                } catch (e) {
-                    $('#webrtcResult').text("Error: " + e);
-                }
-            });
-        });
-        
-        // 3. ทดสอบ API ใหม่
-        $('#testNewApi').click(function() {
-            const rtspUrl = $('#rtspUrl').val();
-            let stream = new MediaStream();
-            let config = {
-                iceServers: [{
-                    urls: ["stun:stun.l.google.com:19302"]
-                }]
-            };
-            
-            const pc = new RTCPeerConnection(config);
-            
-            pc.ontrack = function(event) {
-                stream.addTrack(event.track);
-                $('#videoElem2')[0].srcObject = stream;
-                $('#newApiResult').text(`Track received: ${event.track.kind}`);
-            };
-            
-            pc.oniceconnectionstatechange = e => {
-                $('#newApiResult').append(`\nICE state: ${pc.iceConnectionState}`);
-            };
-            
-            // เพิ่ม transceiver สำหรับวิดีโอ
-            pc.addTransceiver('video', {
-                direction: 'sendrecv'
-            });
-            
-            // สร้าง offer
-            pc.createOffer().then(offer => {
-                return pc.setLocalDescription(offer);
-            }).then(() => {
-                // ส่ง URL RTSP และ SDP offer ไปยังเซิร์ฟเวอร์
-                $.post("http://localhost:8083/stream", {
-                    url: rtspUrl,
-                    sdp64: btoa(pc.localDescription.sdp)
-                }, function(data) {
-                    try {
-                        const response = (typeof data === 'string') ? JSON.parse(data) : data;
-                        $('#newApiResult').append("\nResponse: " + JSON.stringify(response, null, 2));
-                        
-                        pc.setRemoteDescription(new RTCSessionDescription({
-                            type: 'answer',
-                            sdp: atob(response.sdp64)
-                        }));
-                        $('#newApiResult').append("\nConnection established!");
-                    } catch (e) {
-                        $('#newApiResult').append("\nError processing response: " + e);
-                    }
-                }).fail(function(err) {
-                    $('#newApiResult').append("\nRequest failed: " + JSON.stringify(err));
-                });
-            });
-        });
+            }
 
-        
+            // ฟังก์ชันยกเลิกการเชื่อมต่อกล้อง
+            function disconnectCamera(index) {
+                const statusElement = $(`#status${index}`);
+                
+                if (peerConnections[index]) {
+                    // ปิดการเชื่อมต่อ WebRTC
+                    peerConnections[index].close();
+                    delete peerConnections[index];
+                    
+                    // ลบสตรีมวิดีโอ
+                    $(`#video${index}`)[0].srcObject = null;
+                    
+                    statusElement.text('Disconnected. Ready to connect again.');
+                }
+            }
+        });
     </script>
 </body>
 </html>
